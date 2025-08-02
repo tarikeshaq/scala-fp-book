@@ -6,9 +6,11 @@ object List:
   def apply[A](as: A*): List[A] =
     if as.isEmpty then Nil
     else Cons(as.head, apply(as.tail*))
+
   def fill[A](n: Int)(a: A): List[A] =
     if n == 0 then Nil
     else Cons(a, fill(n - 1)(a))
+
   def sum(ints: List[Int]): Int =
     def sum_inner(ints: List[Int], acc: Int): Int =
       ints match {
@@ -16,6 +18,7 @@ object List:
         case Cons(head, tail) => sum_inner(tail, acc + head)
       }
     sum_inner(ints, 0)
+
   def product(doubles: List[Double]): Double =
     def product_inner(doubles: List[Double], acc: Double): Double =
       doubles match {
