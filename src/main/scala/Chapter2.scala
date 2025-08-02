@@ -31,7 +31,7 @@ object MyProg:
       def inner(as: Array[A], i: Int, j: Int, gt: (A, A) => Boolean): Boolean =
         if j >= as.length then true
         else if gt(as(i), as(j)) then false
-        else inner(as, i+1, j+1, gt)
+        else inner(as, i + 1, j + 1, gt)
       inner(as, 0, 1, gt)
   def partial[A, B, C](a: A, f: (A, B) => C): B => C =
     b => f(a, b)

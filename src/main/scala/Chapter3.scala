@@ -85,20 +85,20 @@ object List:
     map(as, _.toString)
 
   def map[A, B](as: List[A], f: A => B): List[B] =
-    foldRight(as, Nil: List[B], (e, l) => Cons(f(e), l)) 
+    foldRight(as, Nil: List[B], (e, l) => Cons(f(e), l))
 
   def filter[A](as: List[A], p: A => Boolean): List[A] =
-    flatMap(as, a => if p(a) then List(a) else Nil) 
+    flatMap(as, a => if p(a) then List(a) else Nil)
 
   def flatMap[A, B](as: List[A], f: A => List[B]): List[B] =
     foldRight(as, Nil: List[B], (e, l) => append(f(e), l))
-    
+
   def join[A](l1: List[A], l2: List[A], f: (A, A) => A): List[A] =
     (l1, l2) match {
-      case (Nil, Nil) => Nil
+      case (Nil, Nil)                     => Nil
       case (Cons(x1, xs1), Cons(x2, xs2)) => Cons(f(x1, x2), join(xs1, xs2, f))
-      case (l, Nil) => l
-      case (Nil, l) => l
+      case (l, Nil)                       => l
+      case (Nil, l)                       => l
     }
 
   def hasSubsequence[A](sup: List[A], sub: List[A]): Boolean =
@@ -106,41 +106,41 @@ object List:
       (sup, sub) match {
         case (_, Nil) => true
         case (Nil, _) => false
-        case (Cons(x, xs), Cons(y, ys)) => if x == y then matches(xs, ys) else false
+        case (Cons(x, xs), Cons(y, ys)) =>
+          if x == y then matches(xs, ys) else false
       }
     sup match {
-      case Nil => if sub == Nil then true else false
-      case Cons(x, xs) => matches(sup, sub) || hasSubsequence(xs, sub) 
+      case Nil         => if sub == Nil then true else false
+      case Cons(x, xs) => matches(sup, sub) || hasSubsequence(xs, sub)
     }
 
-
 enum Tree[+A]:
-   case Leaf(value: A)
-   case Branch(right: Tree[A], left: Tree[A])
-   
-   def size: Int = fold(_ => 1, _ + _ + 1) 
+  case Leaf(value: A)
+  case Branch(right: Tree[A], left: Tree[A])
 
-   def depth: Int = fold(_ => 1, _.max(_) + 1) 
+  def size: Int = fold(_ => 1, _ + _ + 1)
 
-   def map[B](f: A => B): Tree[B] = fold(a => Leaf(f(a)), Branch(_, _)) 
+  def depth: Int = fold(_ => 1, _.max(_) + 1)
 
-   def fold[B](f: A => B, g: (B, B) => B): B = this match {
-     case Leaf(value) => f(value)
-     case Branch(right, left) => g(right.fold(f, g), left.fold(f, g))
-   }
+  def map[B](f: A => B): Tree[B] = fold(a => Leaf(f(a)), Branch(_, _))
+
+  def fold[B](f: A => B, g: (B, B) => B): B = this match {
+    case Leaf(value)         => f(value)
+    case Branch(right, left) => g(right.fold(f, g), left.fold(f, g))
+  }
 
 object Tree:
-   def apply[A](value: A): Tree[A] =
-     Leaf(value)
+  def apply[A](value: A): Tree[A] =
+    Leaf(value)
 
-   extension (t: Tree[Int]) def firstPositive: Int = t match {
-     case Leaf(value) => value
-     case Branch(right, left) => 
-       val lpos = left.firstPositive
-       if lpos > 0 then lpos else right.firstPositive
-   }
+  extension (t: Tree[Int])
+    def firstPositive: Int = t match {
+      case Leaf(value) => value
+      case Branch(right, left) =>
+        val lpos = left.firstPositive
+        if lpos > 0 then lpos else right.firstPositive
+    }
 
-   extension (t: Tree[Int]) def maximum: Int =
-     t.fold(a => a, _.max(_))
-
-
+  extension (t: Tree[Int])
+    def maximum: Int =
+      t.fold(a => a, _.max(_))
