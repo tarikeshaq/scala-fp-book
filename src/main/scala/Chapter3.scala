@@ -6,6 +6,9 @@ object List:
   def apply[A](as: A*): List[A] =
     if as.isEmpty then Nil
     else Cons(as.head, apply(as.tail*)) 
+  def fill[A](n: Int)(a: A): List[A] =
+    if n == 0 then Nil
+    else Cons(a, fill(n-1)(a))
   def sum(ints: List[Int]): Int =
     def sum_inner(ints: List[Int], acc: Int): Int =
       ints match {
