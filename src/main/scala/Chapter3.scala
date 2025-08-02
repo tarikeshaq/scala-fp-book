@@ -118,19 +118,15 @@ enum Tree[+A]:
    case Leaf(value: A)
    case Branch(right: Tree[A], left: Tree[A])
    
-   def size: Int = this match {
-     case Leaf(value) => 1
-     case Branch(right, left) => right.size + left.size + 1
-   }
+   def size: Int = fold(_ => 1, _ + _ + 1) 
 
-   def depth: Int = this match {
-     case Leaf(value) => 1
-     case Branch(right, left) => 1 + right.depth.max(left.depth)
-   }
+   def depth: Int = fold(_ => 1, _.max(_) + 1) 
 
-   def map[B](f: A => B): Tree[B] = this match {
-     case Leaf(value) => Leaf(f(value))
-     case Branch(right, left) => Branch(right.map(f), left.map(f))
+   def map[B](f: A => B): Tree[B] = fold(a => Leaf(f(a)), Branch(_, _)) 
+
+   def fold[B](f: A => B, g: (B, B) => B): B = this match {
+     case Leaf(value) => f(value)
+     case Branch(right, left) => g(right.fold(f, g), left.fold(f, g))
    }
 
 object Tree:
@@ -144,9 +140,7 @@ object Tree:
        if lpos > 0 then lpos else right.firstPositive
    }
 
-   extension (t: Tree[Int]) def max: Int = t match {
-     case Leaf(value) => value
-     case Branch(right, left) => right.max.max(left.max)
-   }
+   extension (t: Tree[Int]) def maximum: Int =
+     t.fold(a => a, _.max(_))
 
 
