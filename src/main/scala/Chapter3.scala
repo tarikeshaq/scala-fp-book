@@ -17,6 +17,7 @@ object List:
     def product_inner(doubles: List[Double], acc: Double): Double =
       doubles match {
         case Nil => acc
+        case Cons(0.0, _) => 0.0
         case Cons(head, tail) => product_inner(tail, acc * head)
       }
     product_inner(doubles, 1)
