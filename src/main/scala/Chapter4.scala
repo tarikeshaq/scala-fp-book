@@ -57,25 +57,29 @@ enum Either[+E, +A]:
   }
 
   def getOrElse[B >: A](default: => B): B = this match {
-    case Left(value) => default
+    case Left(value)  => default
     case Right(value) => value
   }
 
-  def orElse[EE >: E, B >: A](b: => Either[EE, B]): Either[EE, B] = map(Right(_)).getOrElse(b)
+  def orElse[EE >: E, B >: A](b: => Either[EE, B]): Either[EE, B] =
+    map(Right(_)).getOrElse(b)
 
   def flatMap[EE >: E, B](f: A => Either[EE, B]): Either[EE, B] = map(f) match {
     case Right(value) => value
-    case Left(value) => Left(value)
+    case Left(value)  => Left(value)
   }
 
-  def map2[EE >: E, B, C](that: Either[EE, B])(f: (A, B) => C): Either[EE, C] = (this, that) match {
-    case (Right(a), Right(b)) => Right(f(a, b))
-    case (Left(v), _) => Left(v)
-    case (_, Left(v)) => Left(v)
-  }
+  def map2[EE >: E, B, C](that: Either[EE, B])(f: (A, B) => C): Either[EE, C] =
+    (this, that) match {
+      case (Right(a), Right(b)) => Right(f(a, b))
+      case (Left(v), _)         => Left(v)
+      case (_, Left(v))         => Left(v)
+    }
 
 def traverse[E, A, B](as: List[A])(f: A => Either[E, B]): Either[E, List[B]] =
-  as.foldRight(Right(Nil: List[B]))((e, acc) => acc.map2(f(e))((xs, x) => x :: xs))
+  as.foldRight(Right(Nil: List[B]))((e, acc) =>
+    acc.map2(f(e))((xs, x) => x :: xs)
+  )
 
 def sequence[E, A](as: List[Either[E, A]]): Either[E, List[A]] =
   traverse(as)(a => a)
