@@ -35,3 +35,13 @@ def lift[A, B](f: A => B): Option[A] => Option[B] =
 def toIntOption(s: String): Option[Int] =
   try Some(s.toInt)
   catch case _: NumberFormatException => None
+
+def map2[A, B, C](a: Option[A], b: Option[B])(f: (A, B) => C): Option[C] = (a, b) match {
+  case (Some(x), Some(y)) => Some(f(x, y))
+  case _ => None
+}
+
+def sequence[A](as: List[Option[A]]): Option[List[A]] = traverse(as)(a => a) 
+
+def traverse[A, B](as: List[A])(f: A => Option[B]): Option[List[B]] = as.foldRight(Some(Nil))((e, acc) => 
+    acc.flatMap(xs => f(e).map(e => e :: xs)))
