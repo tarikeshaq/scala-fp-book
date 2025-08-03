@@ -144,4 +144,3 @@ object MyTree:
   extension (t: MyTree[Int])
     def maximum: Int =
       t.fold(a => a, _.max(_))
-
