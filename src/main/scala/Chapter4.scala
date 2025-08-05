@@ -16,7 +16,8 @@ enum MyOption[+A]:
     case Some(get) => get
   }
 
-  def orElse[B >: A](ob: => MyOption[B]): MyOption[B] = map(Some(_)).getOrElse(ob)
+  def orElse[B >: A](ob: => MyOption[B]): MyOption[B] =
+    map(Some(_)).getOrElse(ob)
 
   def filter(p: A => Boolean): MyOption[A] =
     flatMap(a => if p(a) then Some(a) else None)
@@ -64,19 +65,25 @@ enum MyEither[+E, +A]:
   def orElse[EE >: E, B >: A](b: => MyEither[EE, B]): MyEither[EE, B] =
     map(Right(_)).getOrElse(b)
 
-  def flatMap[EE >: E, B](f: A => MyEither[EE, B]): MyEither[EE, B] = map(f) match {
+  def flatMap[EE >: E, B](f: A => MyEither[EE, B]): MyEither[EE, B] = map(
+    f
+  ) match {
     case Right(value) => value
     case Left(value)  => Left(value)
   }
 
-  def map2[EE >: E, B, C](that: MyEither[EE, B])(f: (A, B) => C): MyEither[EE, C] =
+  def map2[EE >: E, B, C](
+      that: MyEither[EE, B]
+  )(f: (A, B) => C): MyEither[EE, C] =
     (this, that) match {
       case (Right(a), Right(b)) => Right(f(a, b))
       case (Left(v), _)         => Left(v)
       case (_, Left(v))         => Left(v)
     }
 
-def traverse[E, A, B](as: List[A])(f: A => MyEither[E, B]): MyEither[E, List[B]] =
+def traverse[E, A, B](
+    as: List[A]
+)(f: A => MyEither[E, B]): MyEither[E, List[B]] =
   as.foldRight(Right(Nil: List[B]))((e, acc) =>
     acc.map2(f(e))((xs, x) => x :: xs)
   )
