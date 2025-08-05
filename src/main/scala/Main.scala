@@ -1,6 +1,4 @@
-import MyOption.*
 @main def hello(): Unit =
-  val res = Some(1).flatMap(a => None)
-  println(res)
-  val absO: MyOption[Double] => MyOption[Double] = lift(math.abs)
-  println(absO(None))
+ val lazyList = LazyList(1, 2, 3, 4, 5, 6)
+ val l = lazyList.takeWhile(_ < 5).drop(1).headOption
+ println(l)
