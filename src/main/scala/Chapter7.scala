@@ -1,47 +1,62 @@
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.Callable
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CountDownLatch
 
-opaque type Par[A] = ExecutorService => Future[A]
+
+opaque type Future[+A] = (A => Unit) => Unit
+opaque type Par[+A] = ExecutorService => Future[A]
 
 object Par:
-  def unit[A](a: A): Par[A] = _ => UnitFuture(a)
+  def unit[A](a: A): Par[A] =
+    e => 
+      callback =>
+        callback(a)
+  def eval(es: ExecutorService)(r: => Unit): Unit =
+    es.submit(new Callable[Unit] { def call(): Unit = r })
 
-  private case class UnitFuture[A](get: A) extends Future[A]:
-    def isDone(): Boolean = true
-    def get(timeout: Long, unit: TimeUnit): A = get
-    def isCancelled(): Boolean = false
-    def cancel(mayInterruptIfRunning: Boolean): Boolean = false
+  def join[A](ppa: Par[Par[A]]): Par[A] =
+    es => cb =>
+      ppa(es){ pa => pa(es)(cb) }
 
-  extension [A](pa: Par[A]) def run(e: ExecutorService): Future[A] = pa(e)
+  def fork[A](pa: => Par[A]): Par[A] =
+    es =>
+      callback =>
+        eval(es)(pa(es)(callback))
+  def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A] =
+    n.flatMap(choices(_)) 
+
+  def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
+    cond.flatMap(if _ then t else f)
+
+  def choiceMap[K, V](key: Par[K])(choices: Map[K, Par[V]]): Par[V] =
+    key.flatMap(choices(_))
+
+  extension [A](pa: Par[A]) def run(e: ExecutorService): A =
+    val ref = new AtomicReference[A]
+    val latch = new CountDownLatch(1)
+    pa(e) { a => ref.set(a); latch.countDown}
+    latch.await
+    ref.get
 
   extension [A](pa: Par[A])
     def map2[B, C](b: Par[B])(f: (A, B) => C): Par[C] =
-      e =>
-        new Future[C]:
-          val futA = pa(e)
-          val futB = b(e)
-          @volatile var cache: Option[C] = None
+      es => cb =>
+        var ar: Option[A] = None
+        var br: Option[B] = None
+        val combiner = Actor[Either[A, B]](es):
+          case Left(a) => br match {
+            case Some(b) => cb(f(a, b))
+            case None => ar = Some(a)
+          }
+          case Right(b) => ar match {
+            case Some(a) => cb(f(a, b))
+            case None => br = Some(b)
+          }
+        pa(es){ a => combiner ! Left(a) }
+        b(es){ b => combiner ! Right(b) }
 
-          def isDone(): Boolean = cache.isDefined
-          def isCancelled(): Boolean =
-            cache.isEmpty && (futA.isCancelled() || futB.isCancelled())
-          def get(timeout: Long, unit: TimeUnit): C =
-            val timoutNs = TimeUnit.NANOSECONDS.convert(timeout, unit)
-            val timeNow = System.nanoTime()
-            val aRes = futA.get(timeout, unit)
-            val timeElapsed = System.nanoTime() - timeNow
-            val timeRemaining = timoutNs - timeElapsed
-            val bRes = futB.get(timeRemaining, TimeUnit.NANOSECONDS)
-            val res = f(aRes, bRes)
-            cache = Some(res)
-            res
-
-          def get(): C = f(futA.get, futB.get)
-          def cancel(mayInterruptIfRunning: Boolean): Boolean = futA.cancel(
-            mayInterruptIfRunning
-          ) || futB.cancel(mayInterruptIfRunning)
     def map[B](f: A => B): Par[B] =
       pa.map2(unit(()))((a, _) => f(a))
     def map3[B, C, D](b: Par[B], c: Par[C])(f: (A, B, C) => D): Par[D] =
@@ -70,6 +85,9 @@ object Par:
           case (a, b, c) => f(a, b, c, d, e)
         }
       )
+
+    def flatMap[B](f: A => Par[B]): Par[B] =
+     join(pa.map(f))
 
   def sequence[A](ps: List[Par[A]]): Par[List[A]] =
     sequenceBalanced(ps.toIndexedSeq).map(_.toList)
@@ -102,14 +120,11 @@ object Par:
         val (l, r) = ps.splitAt(ps.size / 2)
         val resRight = parReduce(r)(mapper)(join)
         parReduce(l)(mapper)(join).map2(resRight)(join)
-
-  def fork[A](a: => Par[A]): Par[A] =
-    es =>
-      es.submit(new Callable[A] {
-        def call = a(es).get
-      })
-
   def lazyUnit[A](a: => A): Par[A] = fork(unit(a))
+
+  def delay[A](p: => Par[A]): Par[A] =
+    e => p(e)
+
 
   def asyncF[A, B](f: A => B): A => Par[B] =
     a => lazyUnit(f(a))
