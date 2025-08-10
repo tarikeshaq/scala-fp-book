@@ -36,7 +36,7 @@ object State:
     yield ()
   
 
-type Rand[A] = State[RNG, A]
+type Rand[+A] = State[RNG, A]
 
 val int: Rand[Int] = State.apply(rng => rng.nextInt)
 
