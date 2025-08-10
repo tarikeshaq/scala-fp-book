@@ -4,28 +4,22 @@ import java.util.concurrent.Callable
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.CountDownLatch
 
-
 opaque type Future[+A] = (A => Unit) => Unit
 opaque type Par[+A] = ExecutorService => Future[A]
 
 object Par:
   def unit[A](a: A): Par[A] =
-    e => 
-      callback =>
-        callback(a)
+    e => callback => callback(a)
   def eval(es: ExecutorService)(r: => Unit): Unit =
     es.submit(new Callable[Unit] { def call(): Unit = r })
 
   def join[A](ppa: Par[Par[A]]): Par[A] =
-    es => cb =>
-      ppa(es){ pa => pa(es)(cb) }
+    es => cb => ppa(es) { pa => pa(es)(cb) }
 
   def fork[A](pa: => Par[A]): Par[A] =
-    es =>
-      callback =>
-        eval(es)(pa(es)(callback))
+    es => callback => eval(es)(pa(es)(callback))
   def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A] =
-    n.flatMap(choices(_)) 
+    n.flatMap(choices(_))
 
   def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
     cond.flatMap(if _ then t else f)
@@ -33,29 +27,35 @@ object Par:
   def choiceMap[K, V](key: Par[K])(choices: Map[K, Par[V]]): Par[V] =
     key.flatMap(choices(_))
 
-  extension [A](pa: Par[A]) def run(e: ExecutorService): A =
-    val ref = new AtomicReference[A]
-    val latch = new CountDownLatch(1)
-    pa(e) { a => ref.set(a); latch.countDown}
-    latch.await
-    ref.get
+  extension [A](pa: Par[A])
+    def run(e: ExecutorService): A =
+      val ref = new AtomicReference[A]
+      val latch = new CountDownLatch(1)
+      pa(e) { a =>
+        ref.set(a); latch.countDown
+      }
+      latch.await
+      ref.get
 
   extension [A](pa: Par[A])
     def map2[B, C](b: Par[B])(f: (A, B) => C): Par[C] =
-      es => cb =>
-        var ar: Option[A] = None
-        var br: Option[B] = None
-        val combiner = Actor[Either[A, B]](es):
-          case Left(a) => br match {
-            case Some(b) => cb(f(a, b))
-            case None => ar = Some(a)
-          }
-          case Right(b) => ar match {
-            case Some(a) => cb(f(a, b))
-            case None => br = Some(b)
-          }
-        pa(es){ a => combiner ! Left(a) }
-        b(es){ b => combiner ! Right(b) }
+      es =>
+        cb =>
+          var ar: Option[A] = None
+          var br: Option[B] = None
+          val combiner = Actor[Either[A, B]](es):
+            case Left(a) =>
+              br match {
+                case Some(b) => cb(f(a, b))
+                case None    => ar = Some(a)
+              }
+            case Right(b) =>
+              ar match {
+                case Some(a) => cb(f(a, b))
+                case None    => br = Some(b)
+              }
+          pa(es) { a => combiner ! Left(a) }
+          b(es) { b => combiner ! Right(b) }
 
     def map[B](f: A => B): Par[B] =
       pa.map2(unit(()))((a, _) => f(a))
@@ -87,7 +87,7 @@ object Par:
       )
 
     def flatMap[B](f: A => Par[B]): Par[B] =
-     join(pa.map(f))
+      join(pa.map(f))
 
   def sequence[A](ps: List[Par[A]]): Par[List[A]] =
     sequenceBalanced(ps.toIndexedSeq).map(_.toList)
@@ -124,7 +124,6 @@ object Par:
 
   def delay[A](p: => Par[A]): Par[A] =
     e => p(e)
-
 
   def asyncF[A, B](f: A => B): A => Par[B] =
     a => lazyUnit(f(a))
