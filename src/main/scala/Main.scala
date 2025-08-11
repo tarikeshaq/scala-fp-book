@@ -1,6 +1,15 @@
 @main def hello(): Unit =
-  val p = Prop.forAll(Gen.boolean)(x => x == x) 
-  val q = Prop.forAll(Gen.boolean)(x => x)
+  val smallInt = Gen.choose(-10, 10)
+  
+  val maxProp = Prop.forAll(smallInt.nonEmptyList): l =>
+    val max = l.max
+    l.forall(_ <= max)
 
-  (q || q).run
+  val sortProp = Prop.forAll(smallInt.list): l =>
+    val sorted = l.sorted
+    sorted.foldLeft((Int.MinValue, true)) {
+      case ((acc, sorted), curr) => if curr < acc then (curr, false) else (curr, true)
+    }._2
+
+  sortProp.run 
 
