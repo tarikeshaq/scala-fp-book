@@ -69,6 +69,11 @@ object RNG:
   def intDouble: Rand[(Int, Double)] =
     both(int, double)
 
+  def char: Rand[Char] =
+    nonNegativeInt.map(n =>
+        (n % Char.MaxValue).toChar
+    )
+
   def doubleInt: Rand[(Double, Int)] =
     both(double, int)
 

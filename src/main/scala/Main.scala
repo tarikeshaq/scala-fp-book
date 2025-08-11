@@ -1,9 +1,6 @@
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.ForkJoinPool
-
 @main def hello(): Unit =
-  val ls = List("Hello there man", "how are you doing today")
-  val parRes = numWords(ls)
-  val res = parRes.run(ForkJoinPool.commonPool())
-  println(res)
+  val p = Prop.forAll(Gen.boolean)(x => x == x) 
+  val q = Prop.forAll(Gen.boolean)(x => x)
+
+  (q || q).run
+
