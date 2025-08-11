@@ -5,7 +5,7 @@ object State:
     def run(s: S): (A, S) = underlying(s)
 
     def flatMap[B](f: A => State[S, B]): State[S, B] =
-      s => 
+      s =>
         val (a, nextState) = underlying(s)
         f(a)(nextState)
 
@@ -23,18 +23,16 @@ object State:
   def sequence[S, A](rs: List[State[S, A]]): State[S, List[A]] =
     rs.foldRight(State.unit(Nil: List[A]))((a, b) => a.map2(b)(_ :: _))
 
-
   def get[S]: State[S, S] = s => (s, s)
 
   def set[S](newState: S): State[S, Unit] =
-    _ => ((), newState) 
+    _ => ((), newState)
 
   def modify[S](f: S => S): State[S, Unit] =
     for
       s <- get
       _ <- set(f(s))
     yield ()
-  
 
 type Rand[+A] = State[RNG, A]
 
@@ -59,7 +57,6 @@ object RNG:
         case v if v < 0 => v * -1
         case v          => v
       },
-
     )
   def nonNegativeEven: Rand[Int] =
     nonNegativeInt.map(i => i - (i % 2))
@@ -70,9 +67,7 @@ object RNG:
     both(int, double)
 
   def char: Rand[Char] =
-    nonNegativeInt.map(n =>
-        (n % Char.MaxValue).toChar
-    )
+    nonNegativeInt.map(n => (n % Char.MaxValue).toChar)
 
   def doubleInt: Rand[(Double, Int)] =
     both(double, int)

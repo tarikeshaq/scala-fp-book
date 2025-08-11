@@ -2,13 +2,11 @@ import Result.Falsified
 opaque type Gen[+A] = State[RNG, A]
 opaque type SGen[+A] = Int => Gen[A]
 
-
 opaque type MaxSize = Int
 
 object MaxSize:
-  extension (m: MaxSize) def toInt: Int = m 
+  extension (m: MaxSize) def toInt: Int = m
   def fromInt(i: Int): MaxSize = i
-
 
 opaque type TestCases = Int
 
@@ -56,11 +54,12 @@ object Prop:
 
   extension (self: Prop)
     def tag(msg: String): Prop =
-      (maxSize, testCases, rng) => self(maxSize, testCases, rng).mapFailure(err => s"$msg($err)")
+      (maxSize, testCases, rng) =>
+        self(maxSize, testCases, rng).mapFailure(err => s"$msg($err)")
 
   extension (self: Prop)
     def run: Unit =
-      self(100,100, SimpleRNG(System.currentTimeMillis)) match {
+      self(100, 100, SimpleRNG(System.currentTimeMillis)) match {
         case Result.Falsified(failure, successes) =>
           println(s"! Falsified after $successes passed tests: \n $failure")
         case Result.Passed =>
@@ -79,14 +78,15 @@ object Prop:
   def forAll[A](g: SGen[A])(f: A => Boolean): Prop =
     (maxSize, testCases, rng) =>
       val casesPerSize = (testCases.toInt - 1) / maxSize.toInt + 1
-      val props: LazyList[Prop] = LazyList.from(0)
+      val props: LazyList[Prop] = LazyList
+        .from(0)
         .take((testCases.toInt min maxSize.toInt) + 1)
         .map(i => forAll(g(i))(f))
-      val prop: Prop = 
-        props.map[Prop](p => (max, n, rng) => 
-            p(max, casesPerSize, rng))
-            .toList
-            .reduce(_ && _)
+      val prop: Prop =
+        props
+          .map[Prop](p => (max, n, rng) => p(max, casesPerSize, rng))
+          .toList
+          .reduce(_ && _)
       prop(maxSize, testCases, rng)
 
   def forAll[A](as: Gen[A])(f: A => Boolean): Prop =
@@ -132,8 +132,9 @@ object Gen:
       case Some(v) => v
     })
 
-  extension [A](self: Gen[A]) def unsized: SGen[A] =
-    _ => self
+  extension [A](self: Gen[A])
+    def unsized: SGen[A] =
+      _ => self
 
   def stringOfN(n: Int): Gen[String] =
     RNG.char.listOfN(n).map(_.mkString)
@@ -168,23 +169,17 @@ object SGen:
   def boolean: SGen[Boolean] = s => Gen.boolean
 
   def union[A](g1: SGen[A], g2: SGen[A]): SGen[A] =
-    s =>
-      Gen.union(g1(s), g2(s))
+    s => Gen.union(g1(s), g2(s))
 
   def weighted[A](g1: (SGen[A], Double), g2: (SGen[A], Double)): SGen[A] =
-    s => 
-      Gen.weighted((g1._1(s), g1._2), (g2._1(s), g2._2))
+    s => Gen.weighted((g1._1(s), g1._2), (g2._1(s), g2._2))
 
   extension [A](self: SGen[A])
     def map2[B](that: SGen[B])(f: (A, B) => B): SGen[B] =
-      s => 
-        self(s).map2(that(s))(f)
+      s => self(s).map2(that(s))(f)
 
     def flatMap[B](f: A => SGen[B]): SGen[B] =
-      s =>
-        self(s).flatMap(a => f(a)(s))
-    
-    def zip[B](that: SGen[B]): SGen[(A, B)] =
-      s =>
-        Gen.zip(self(s))(that(s)) 
+      s => self(s).flatMap(a => f(a)(s))
 
+    def zip[B](that: SGen[B]): SGen[(A, B)] =
+      s => Gen.zip(self(s))(that(s))
