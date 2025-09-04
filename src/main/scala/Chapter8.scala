@@ -20,6 +20,7 @@ enum Result:
       failure: FailedCase,
       successes: SuccessCount
   )
+  case Proved
 
   def isFalsified: Boolean = this match {
     case Falsified(_, _) => true
@@ -28,8 +29,8 @@ enum Result:
 
   def mapFailure(f: FailedCase => FailedCase): Result =
     this match {
-      case Passed                        => Passed
       case Falsified(failure, successes) => Falsified(f(failure), successes)
+      case other => other 
     }
 
 opaque type Prop = (MaxSize, TestCases, RNG) => Result
@@ -41,7 +42,7 @@ object Prop:
     def &&(that: Prop): Prop =
       (maxSize, testCases, rng) =>
         self(maxSize, testCases, rng) match {
-          case Result.Passed => that(maxSize, testCases, rng)
+          case Result.Passed | Result.Proved => that(maxSize, testCases, rng)
           case failure       => failure
         }
   extension (self: Prop)
@@ -64,7 +65,20 @@ object Prop:
           println(s"! Falsified after $successes passed tests: \n $failure")
         case Result.Passed =>
           println(s"+ OK. passed 100 tests")
+        case Result.Proved =>
+          println(s"+ OK, proved property.")
       }
+
+    def check(
+      maxSize: MaxSize = 100,
+      testCases: TestCases = 100,
+      rng: RNG = SimpleRNG(System.currentTimeMillis())
+      ): Result = 
+        self(maxSize, testCases, rng)
+
+  def verify(p: => Boolean): Prop =
+    (_, _, _) => if p then Result.Proved else Result.Falsified("{}", 0)
+
 
   def randomLazyList[A](g: Gen[A])(rng: RNG): LazyList[A] =
     LazyList.unfold(rng)(rng => Some(g.run(rng)))
