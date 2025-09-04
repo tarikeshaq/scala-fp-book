@@ -30,7 +30,7 @@ enum Result:
   def mapFailure(f: FailedCase => FailedCase): Result =
     this match {
       case Falsified(failure, successes) => Falsified(f(failure), successes)
-      case other => other 
+      case other                         => other
     }
 
 opaque type Prop = (MaxSize, TestCases, RNG) => Result
@@ -43,7 +43,7 @@ object Prop:
       (maxSize, testCases, rng) =>
         self(maxSize, testCases, rng) match {
           case Result.Passed | Result.Proved => that(maxSize, testCases, rng)
-          case failure       => failure
+          case failure                       => failure
         }
   extension (self: Prop)
     def ||(that: Prop): Prop =
@@ -70,15 +70,14 @@ object Prop:
       }
 
     def check(
-      maxSize: MaxSize = 100,
-      testCases: TestCases = 100,
-      rng: RNG = SimpleRNG(System.currentTimeMillis())
-      ): Result = 
-        self(maxSize, testCases, rng)
+        maxSize: MaxSize = 100,
+        testCases: TestCases = 100,
+        rng: RNG = SimpleRNG(System.currentTimeMillis())
+    ): Result =
+      self(maxSize, testCases, rng)
 
   def verify(p: => Boolean): Prop =
     (_, _, _) => if p then Result.Proved else Result.Falsified("{}", 0)
-
 
   def randomLazyList[A](g: Gen[A])(rng: RNG): LazyList[A] =
     LazyList.unfold(rng)(rng => Some(g.run(rng)))
