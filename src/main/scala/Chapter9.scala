@@ -53,15 +53,16 @@ trait Parsers[ParseError, Parser[+_]]:
     def startsWith[B](pb: => Parser[B]): Parser[A] =
       pb *> p
 
-    def endsWith[B](pb: => Parser[B]): Parser[A] =
-      p <* p
+    def followedBy[B](pb: => Parser[B]): Parser[A] =
+      p <* pb
 
-    def manyDelimited(delimiter: Char): Parser[List[A]] =
-      val other = (string(delimiter.toString) | unit("")).flatMap(s =>
-        if s == delimiter.toString then p.manyDelimited(delimiter)
-        else unit(List.empty)
-      )
-      p.map2(other)(_ :: _) | unit(List.empty)
+    def sepBy[B](pb: => Parser[B]): Parser[List[A]] =
+      p.map2(pb.flatMap(_ => p.sepBy(pb)))(_ :: _) | unit(List.empty)
+
+    def token: Parser[A] = p.ignoreWhitespace
+
+    def between[B, C](before: Parser[B], after: Parser[C]): Parser[A] = 
+      before *> p <* after 
 
   object Laws:
     def equal[A](p1: Parser[A], p2: Parser[A])(in: Gen[String]): Prop =
@@ -99,10 +100,10 @@ trait Parsers[ParseError, Parser[+_]]:
     regex("\\d".r).map(_.toInt)
 
   def stringLiteral: Parser[String] =
-    regex("\"([^\"]*)\"".r)
+    regex("\"([^\"]*)\"".r).map(s => s.substring(1, s.length-1))
 
   def whitespace: Parser[String] =
-    (char(' ') | char('\n')).many.map(_.mkString) | unit("")
+    regex("\\s*".r)
 
   def regex(r: Regex): Parser[String]
 
@@ -122,42 +123,37 @@ def parseJson[Err, Parser[+_]](
 ): Parser[JSON] =
   import P.*
 
-  def parseDoc: Parser[JSON] =
-    parseJsonObject | parseJsonArray
+  def json: Parser[JSON] =
+    parseJsonObject | parseJsonArray | parseNum | parseString | parseBool | parseNull
 
   def parseKeyValue: Parser[(String, JSON)] =
-    stringLiteral.ignoreWhitespace
-      .endsWith(char(':'))
-      .ignoreWhitespace ** parseJson(P)
+    stringLiteral
+      .token
+      .followedBy(char(':').token)
+      ** parseJson(P)
 
   def parseJsonObject: Parser[JSON] =
     parseKeyValue
-      .manyDelimited(',')
+      .sepBy(char(',').token)
       .map(elements => JSON.JObject(elements.toMap))
-      .startsWith(char('{').ignoreWhitespace)
-      .endsWith(char('}').ignoreWhitespace)
+      .between(char('{').token, char('}').token)
 
   def parseJsonArray: Parser[JSON] =
     parseJson(P)
-      .manyDelimited(',')
+      .sepBy(char(',').token)
       .map(elements => JSON.JArray(elements.toIndexedSeq))
-      .startsWith(char('{').ignoreWhitespace)
-      .endsWith(char(']').ignoreWhitespace)
+      .between(char('[').token, char(']').token)
 
   def parseNum: Parser[JSON] =
-    (regex("\\d".r) | char('.') | char('e')).ignoreWhitespace.many.map(l =>
-      JSON.JNumber(l.mkString.toDouble)
-    )
-
+    (regex("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?".r)).token.map(s => JSON.JNumber(s.toDouble))
   def parseNull: Parser[JSON] =
-    string("null").map(_ => JSON.JNull)
+    string("null").token.map(_ => JSON.JNull)
 
   def parseString: Parser[JSON] =
-    stringLiteral.ignoreWhitespace.map(JSON.JString(_))
+    stringLiteral.token.map(JSON.JString(_))
 
   def parseBool: Parser[JSON] =
-    (string("true") | string("false")).ignoreWhitespace
-      .map(_.toBoolean)
-      .map(JSON.JBool(_))
+    (string("true") | string("false")).token
+    .map(s => JSON.JBool(s.toBoolean))
 
-  parseDoc
+  json.token
