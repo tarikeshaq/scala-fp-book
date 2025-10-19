@@ -61,8 +61,8 @@ trait Parsers[ParseError, Parser[+_]]:
 
     def token: Parser[A] = p.ignoreWhitespace
 
-    def between[B, C](before: Parser[B], after: Parser[C]): Parser[A] = 
-      before *> p <* after 
+    def between[B, C](before: Parser[B], after: Parser[C]): Parser[A] =
+      before *> p <* after
 
   object Laws:
     def equal[A](p1: Parser[A], p2: Parser[A])(in: Gen[String]): Prop =
@@ -100,7 +100,7 @@ trait Parsers[ParseError, Parser[+_]]:
     regex("\\d".r).map(_.toInt)
 
   def stringLiteral: Parser[String] =
-    regex("\"([^\"]*)\"".r).map(s => s.substring(1, s.length-1))
+    regex("\"([^\"]*)\"".r).map(s => s.substring(1, s.length - 1))
 
   def whitespace: Parser[String] =
     regex("\\s*".r)
@@ -127,8 +127,7 @@ def parseJson[Err, Parser[+_]](
     parseJsonObject | parseJsonArray | parseNum | parseString | parseBool | parseNull
 
   def parseKeyValue: Parser[(String, JSON)] =
-    stringLiteral
-      .token
+    stringLiteral.token
       .followedBy(char(':').token)
       ** parseJson(P)
 
@@ -145,7 +144,9 @@ def parseJson[Err, Parser[+_]](
       .between(char('[').token, char(']').token)
 
   def parseNum: Parser[JSON] =
-    (regex("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?".r)).token.map(s => JSON.JNumber(s.toDouble))
+    (regex("-?(0|[1-9]\\d*)(\\.\\d+)?([eE][+-]?\\d+)?".r)).token.map(s =>
+      JSON.JNumber(s.toDouble)
+    )
   def parseNull: Parser[JSON] =
     string("null").token.map(_ => JSON.JNull)
 
@@ -154,6 +155,6 @@ def parseJson[Err, Parser[+_]](
 
   def parseBool: Parser[JSON] =
     (string("true") | string("false")).token
-    .map(s => JSON.JBool(s.toBoolean))
+      .map(s => JSON.JBool(s.toBoolean))
 
   json.token
