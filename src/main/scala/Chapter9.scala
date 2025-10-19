@@ -1,6 +1,5 @@
 import scala.util.matching.*
 
-
 trait Parsers[ParseError, Parser[+_]]:
   extension [A, E](p: Parser[A])
     def run(input: String): Either[ParseError, A]
@@ -11,7 +10,7 @@ trait Parsers[ParseError, Parser[+_]]:
 
     def listOfN(n: Int): Parser[List[A]] =
       if n == 0 then unit(List.empty)
-      else p.map2(p.listOfN(n-1))(_ :: _)
+      else p.map2(p.listOfN(n - 1))(_ :: _)
 
     def map[B](f: A => B): Parser[B] =
       p.flatMap(a => unit(f(a)))
@@ -19,10 +18,10 @@ trait Parsers[ParseError, Parser[+_]]:
     def product[B](pb: => Parser[B]): Parser[(A, B)] =
       p.map2(pb)((_, _))
 
-    def **[B](p2: => Parser[B]): Parser[(A, B) ] = product(p2)
+    def **[B](p2: => Parser[B]): Parser[(A, B)] = product(p2)
 
     def map2[B, C](pb: => Parser[B])(f: (A, B) => C): Parser[C] =
-      p.flatMap(a => pb.flatMap(b => unit(f(a, b)))) 
+      p.flatMap(a => pb.flatMap(b => unit(f(a, b))))
 
     def many: Parser[List[A]] =
       p.map2(p.many)(_ :: _) | unit(List.empty)
@@ -34,7 +33,7 @@ trait Parsers[ParseError, Parser[+_]]:
     def flatMap[B](f: A => Parser[B]): Parser[B]
 
     def ignoreWhitespace: Parser[A] =
-      (whitespace *> p) <* whitespace 
+      (whitespace *> p) <* whitespace
 
     def <*[B](pb: => Parser[B]): Parser[A] =
       p.pickLeft(pb)
@@ -43,12 +42,12 @@ trait Parsers[ParseError, Parser[+_]]:
       p.pickRight(pb)
 
     def pickLeft[B](pb: => Parser[B]): Parser[A] =
-      (p ** pb).map {
-        case (a, b) => a
+      (p ** pb).map { case (a, b) =>
+        a
       }
     def pickRight[B](pb: => Parser[B]): Parser[B] =
-      (p ** pb).map {
-        case (a, b) => b
+      (p ** pb).map { case (a, b) =>
+        b
       }
 
     def startsWith[B](pb: => Parser[B]): Parser[A] =
@@ -58,9 +57,11 @@ trait Parsers[ParseError, Parser[+_]]:
       p <* p
 
     def manyDelimited(delimiter: Char): Parser[List[A]] =
-      val other = (string(delimiter.toString) | unit("")).flatMap(s => if s == delimiter.toString then p.manyDelimited(delimiter) else unit(List.empty))
+      val other = (string(delimiter.toString) | unit("")).flatMap(s =>
+        if s == delimiter.toString then p.manyDelimited(delimiter)
+        else unit(List.empty)
+      )
       p.map2(other)(_ :: _) | unit(List.empty)
-
 
   object Laws:
     def equal[A](p1: Parser[A], p2: Parser[A])(in: Gen[String]): Prop =
@@ -70,22 +71,21 @@ trait Parsers[ParseError, Parser[+_]]:
       equal(p.map(a => a), p)(in)
 
     def unitLaw[A](in: Gen[(String, A)]): Prop =
-      Prop.forAll(in) {
-        case (in, a) => unit(a).run(in) == a
+      Prop.forAll(in) { case (in, a) =>
+        unit(a).run(in) == a
       }
 
     def productLaw[A, B](p1: Parser[A], p2: Parser[B])(in: Gen[String]): Prop =
-      Prop.forAll(in) { s => 
-         p1.slice.run(s) match {
-           case Left(value) => Left(value) == (p1 ** p2).run(s)
-           case Right(considered) => {
-             val toBeConsideredP2 = s.stripPrefix(considered)
-             (p1.run(considered), p2.run(toBeConsideredP2)) == (p1 ** p2).run(s)
-           }
-         }
+      Prop.forAll(in) { s =>
+        p1.slice.run(s) match {
+          case Left(value) => Left(value) == (p1 ** p2).run(s)
+          case Right(considered) => {
+            val toBeConsideredP2 = s.stripPrefix(considered)
+            (p1.run(considered), p2.run(toBeConsideredP2)) == (p1 ** p2).run(s)
+          }
+        }
 
       }
-      
 
   def unit[A](a: A): Parser[A] =
     string("").map(_ => a)
@@ -104,12 +104,10 @@ trait Parsers[ParseError, Parser[+_]]:
   def whitespace: Parser[String] =
     (char(' ') | char('\n')).many.map(_.mkString) | unit("")
 
-
   def regex(r: Regex): Parser[String]
 
   def maybe(c: Char): Parser[Char] =
     char(c) | unit(c)
-
 
 enum JSON:
   case JNull
@@ -120,37 +118,46 @@ enum JSON:
   case JObject(get: Map[String, JSON])
 
 def parseJson[Err, Parser[+_]](
-  P: Parsers[Err, Parser]
-  ): Parser[JSON] =
-    import P.*
+    P: Parsers[Err, Parser]
+): Parser[JSON] =
+  import P.*
 
-    def parseDoc: Parser[JSON] =
-      parseJsonObject | parseJsonArray
+  def parseDoc: Parser[JSON] =
+    parseJsonObject | parseJsonArray
 
-    def parseKeyValue: Parser[(String, JSON)] =
-      stringLiteral.ignoreWhitespace.endsWith(char(':')).ignoreWhitespace ** parseJson(P)
+  def parseKeyValue: Parser[(String, JSON)] =
+    stringLiteral.ignoreWhitespace
+      .endsWith(char(':'))
+      .ignoreWhitespace ** parseJson(P)
 
-    def parseJsonObject: Parser[JSON] =
-      parseKeyValue.manyDelimited(',').map(elements => JSON.JObject(elements.toMap))
+  def parseJsonObject: Parser[JSON] =
+    parseKeyValue
+      .manyDelimited(',')
+      .map(elements => JSON.JObject(elements.toMap))
       .startsWith(char('{').ignoreWhitespace)
       .endsWith(char('}').ignoreWhitespace)
 
-      
-    def parseJsonArray: Parser[JSON] =
-      parseJson(P).manyDelimited(',').map(elements => JSON.JArray(elements.toIndexedSeq))
-        .startsWith(char('{').ignoreWhitespace)
-        .endsWith(char(']').ignoreWhitespace)
+  def parseJsonArray: Parser[JSON] =
+    parseJson(P)
+      .manyDelimited(',')
+      .map(elements => JSON.JArray(elements.toIndexedSeq))
+      .startsWith(char('{').ignoreWhitespace)
+      .endsWith(char(']').ignoreWhitespace)
 
-    def parseNum: Parser[JSON] =
-      (regex("\\d".r) | char('.') | char('e')).ignoreWhitespace.many.map(l => JSON.JNumber(l.mkString.toDouble))
+  def parseNum: Parser[JSON] =
+    (regex("\\d".r) | char('.') | char('e')).ignoreWhitespace.many.map(l =>
+      JSON.JNumber(l.mkString.toDouble)
+    )
 
-    def parseNull: Parser[JSON] =
-      string("null").map(_ => JSON.JNull)
+  def parseNull: Parser[JSON] =
+    string("null").map(_ => JSON.JNull)
 
-    def parseString: Parser[JSON] =
-      stringLiteral.ignoreWhitespace.map(JSON.JString(_))
+  def parseString: Parser[JSON] =
+    stringLiteral.ignoreWhitespace.map(JSON.JString(_))
 
-    def parseBool: Parser[JSON] =
-      (string("true") | string("false")).ignoreWhitespace.map(_.toBoolean).map(JSON.JBool(_))
+  def parseBool: Parser[JSON] =
+    (string("true") | string("false")).ignoreWhitespace
+      .map(_.toBoolean)
+      .map(JSON.JBool(_))
 
-    parseDoc
+  parseDoc
