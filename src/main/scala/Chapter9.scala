@@ -34,9 +34,32 @@ trait Parsers[ParseError, Parser[+_]]:
     def flatMap[B](f: A => Parser[B]): Parser[B]
 
     def ignoreWhitespace: Parser[A] =
-      ((whitespace ** p) ** whitespace).map {
-        case ((_, a), _) => a
+      (whitespace *> p) <* whitespace 
+
+    def <*[B](pb: => Parser[B]): Parser[A] =
+      p.pickLeft(pb)
+
+    def *>[B](pb: => Parser[B]): Parser[B] =
+      p.pickRight(pb)
+
+    def pickLeft[B](pb: => Parser[B]): Parser[A] =
+      (p ** pb).map {
+        case (a, b) => a
       }
+    def pickRight[B](pb: => Parser[B]): Parser[B] =
+      (p ** pb).map {
+        case (a, b) => b
+      }
+
+    def startsWith[B](pb: => Parser[B]): Parser[A] =
+      pb *> p
+
+    def endsWith[B](pb: => Parser[B]): Parser[A] =
+      p <* p
+
+    def manyDelimited(delimiter: Char): Parser[List[A]] =
+      val other = (string(delimiter.toString) | unit("")).flatMap(s => if s == delimiter.toString then p.manyDelimited(delimiter) else unit(List.empty))
+      p.map2(other)(_ :: _) | unit(List.empty)
 
 
   object Laws:
@@ -101,35 +124,22 @@ def parseJson[Err, Parser[+_]](
   ): Parser[JSON] =
     import P.*
 
+    def parseDoc: Parser[JSON] =
+      parseJsonObject | parseJsonArray
+
     def parseKeyValue: Parser[(String, JSON)] =
-      (stringLiteral.ignoreWhitespace ** char(':').ignoreWhitespace ** parseJson(P) ** maybe(',')).map {
-        case (((s, _), j), _) => (s, j)
-      }
+      stringLiteral.ignoreWhitespace.endsWith(char(':')).ignoreWhitespace ** parseJson(P)
 
     def parseJsonObject: Parser[JSON] =
-      (char('{').ignoreWhitespace
-      **
-      parseKeyValue.many.map(elements => JSON.JObject(elements.toMap))
-      **
-      char('}').ignoreWhitespace).map {
-        case ((_, res), _) => res
-      }
+      parseKeyValue.manyDelimited(',').map(elements => JSON.JObject(elements.toMap))
+      .startsWith(char('{').ignoreWhitespace)
+      .endsWith(char('}').ignoreWhitespace)
 
-    def parseArrayElem: Parser[JSON] =
-      (parseJson(P).ignoreWhitespace ** maybe(',')).map {
-        case (j, _) => j
-      }
-
+      
     def parseJsonArray: Parser[JSON] =
-      (
-        char('[').ignoreWhitespace
-        **
-        parseArrayElem.many.map(elements => JSON.JArray(elements.toIndexedSeq))
-        **
-        char(']').ignoreWhitespace
-      ).map {
-        case ((_, j), _) => j
-      }
+      parseJson(P).manyDelimited(',').map(elements => JSON.JArray(elements.toIndexedSeq))
+        .startsWith(char('{').ignoreWhitespace)
+        .endsWith(char(']').ignoreWhitespace)
 
     def parseNum: Parser[JSON] =
       (regex("\\d".r) | char('.') | char('e')).ignoreWhitespace.many.map(l => JSON.JNumber(l.mkString.toDouble))
@@ -143,6 +153,4 @@ def parseJson[Err, Parser[+_]](
     def parseBool: Parser[JSON] =
       (string("true") | string("false")).ignoreWhitespace.map(_.toBoolean).map(JSON.JBool(_))
 
-
-    parseJsonObject | parseJsonArray | parseString | parseNum | parseBool | parseNull 
-
+    parseDoc
