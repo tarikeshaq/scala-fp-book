@@ -1,10 +1,17 @@
 import scala.util.matching.*
+case class ParseError(stack: List[(Location, String)])
 
-trait Parsers[ParseError, Parser[+_]]:
-  extension [A, E](p: Parser[A])
+trait Parsers[Parser[+_]]:
+  extension [A](p: Parser[A])
     def run(input: String): Either[ParseError, A]
 
     infix def or(p2: => Parser[A]): Parser[A]
+
+    def label(msg: String): Parser[A]
+
+    def scope(msg: String): Parser[A]
+
+    def attempt: Parser[A]
 
     def |(p2: => Parser[A]): Parser[A] = p.or(p2)
 
@@ -18,7 +25,7 @@ trait Parsers[ParseError, Parser[+_]]:
     def product[B](pb: => Parser[B]): Parser[(A, B)] =
       p.map2(pb)((_, _))
 
-    def **[B](p2: => Parser[B]): Parser[(A, B)] = product(p2)
+    def **[B](p2: => Parser[B]): Parser[(A, B)] = p.product(p2)
 
     def map2[B, C](pb: => Parser[B])(f: (A, B) => C): Parser[C] =
       p.flatMap(a => pb.flatMap(b => unit(f(a, b))))
@@ -26,7 +33,6 @@ trait Parsers[ParseError, Parser[+_]]:
     def many: Parser[List[A]] =
       p.map2(p.many)(_ :: _) | unit(List.empty)
 
-    def filter(predicate: A => Boolean): Parser[A]
 
     def slice: Parser[String]
 
@@ -57,7 +63,7 @@ trait Parsers[ParseError, Parser[+_]]:
       p <* pb
 
     def sepBy[B](pb: => Parser[B]): Parser[List[A]] =
-      p.map2(pb.flatMap(_ => p.sepBy(pb)))(_ :: _) | unit(List.empty)
+      p.map2((pb *> p.sepBy(pb)) | unit(List.empty))(_ :: _) | unit(List.empty)
 
     def token: Parser[A] = p.ignoreWhitespace
 
@@ -88,8 +94,7 @@ trait Parsers[ParseError, Parser[+_]]:
 
       }
 
-  def unit[A](a: A): Parser[A] =
-    string("").map(_ => a)
+  def unit[A](a: A): Parser[A]
   def char(c: Char): Parser[Char] = string(c.toString).map(_.charAt(0))
   def string(s: String): Parser[String]
   def countAs: Parser[Int] = char('a').many.slice.map(_.size)
@@ -100,8 +105,7 @@ trait Parsers[ParseError, Parser[+_]]:
     regex("\\d".r).map(_.toInt)
 
   def stringLiteral: Parser[String] =
-    regex("\"([^\"]*)\"".r).map(s => s.substring(1, s.length - 1))
-
+    regex("\"([^\"]*)\"".r)
   def whitespace: Parser[String] =
     regex("\\s*".r)
 
@@ -109,6 +113,12 @@ trait Parsers[ParseError, Parser[+_]]:
 
   def maybe(c: Char): Parser[Char] =
     char(c) | unit(c)
+
+case class Location(input: String, offset: Int = 0):
+  lazy val line = input.slice(0, offset + 1).count(_ == '\n') + 1
+  lazy val col = input.slice(0, offset + 1).lastIndexOf('\n') match
+    case -1        => offset + 1
+    case lineStart => offset - lineStart
 
 enum JSON:
   case JNull
@@ -118,8 +128,8 @@ enum JSON:
   case JArray(get: IndexedSeq[JSON])
   case JObject(get: Map[String, JSON])
 
-def parseJson[Err, Parser[+_]](
-    P: Parsers[Err, Parser]
+def parseJson[Parser[+_]](
+    P: Parsers[Parser]
 ): Parser[JSON] =
   import P.*
 
@@ -129,7 +139,7 @@ def parseJson[Err, Parser[+_]](
   def parseKeyValue: Parser[(String, JSON)] =
     stringLiteral.token
       .followedBy(char(':').token)
-      ** parseJson(P)
+      ** json 
 
   def parseJsonObject: Parser[JSON] =
     parseKeyValue
@@ -138,7 +148,7 @@ def parseJson[Err, Parser[+_]](
       .between(char('{').token, char('}').token)
 
   def parseJsonArray: Parser[JSON] =
-    parseJson(P)
+    json
       .sepBy(char(',').token)
       .map(elements => JSON.JArray(elements.toIndexedSeq))
       .between(char('[').token, char(']').token)
@@ -157,4 +167,150 @@ def parseJson[Err, Parser[+_]](
     (string("true") | string("false")).token
       .map(s => JSON.JBool(s.toBoolean))
 
-  json.token
+  json.token.label("failed to parse json")
+
+opaque type ParserImpl[+A] = (
+    String
+) => (Int, List[(Location, String)], Either[ParseError, A])
+
+object ParserImpl:
+  def apply[A](
+      f: (String) => (Int, List[(Location, String)], Either[ParseError, A])
+  ): ParserImpl[A] = f
+
+  extension [A](p: ParserImpl[A])
+    def eval(input: String): (Int, List[(Location, String)], Either[ParseError, A]) =
+      p(input)
+
+object ParsersImpl extends Parsers[ParserImpl]:
+    extension [A](p: ParserImpl[A])
+        def run(input: String): Either[ParseError, A] =
+          val (offset, errList, res) = p.eval(input)
+          res
+
+        def slice: ParserImpl[String] = 
+          ParserImpl.apply(
+            input =>
+              val (offset, errList, res) = p.eval(input)
+              res match {
+                case Left(err) => (offset, errList, Left(err))
+                case Right(_) => (offset, errList, Right(input.slice(0, offset)))
+              }
+               
+          )
+
+        def label(msg: String): ParserImpl[A] = 
+         ParserImpl.apply(
+           input =>
+             val (offset, oldErrList, res) = p.eval(input)
+             res match {
+               case Right(_) => (offset, oldErrList, res)
+               case Left(err) => {
+                   val errList = (Location(input, offset), msg) :: oldErrList
+                   (offset, errList, Left(ParseError(errList)))
+                }         
+             } 
+            )
+        def scope(msg: String): ParserImpl[A] =
+          ParserImpl.apply(
+            input =>
+              val (offset, oldErrList, res) = p.eval(input)
+              val errList = (Location(input, offset), msg) :: oldErrList
+              res match {
+               case Right(_) => (offset, errList, res)
+               case Left(err) => {
+                   (offset, errList, Left(ParseError(errList)))
+                }         
+             } 
+          )
+
+        def flatMap[B](f: A => ParserImpl[B]): ParserImpl[B] = 
+          ParserImpl.apply(
+            input =>
+              val (offset, errList, res) = p.eval(input)
+              res match {
+                case Right(value) => {
+                  val nextParser = f(value)
+                  val (nextOffset, nextErrList, nextRes) = nextParser.eval(input.slice(offset, input.size))
+                  val finalErrList = errList ++ nextErrList
+                  val finalOffset = offset + nextOffset 
+                  nextRes match { 
+                  case Right(_) => (finalOffset, finalErrList, nextRes)
+                  case Left(_) => (finalOffset, finalErrList, Left(ParseError(finalErrList)))
+                  }
+                } 
+                case Left(e) => (offset, errList, Left(e))
+              }
+          )
+        
+        def attempt: ParserImpl[A] = ParserImpl.apply(
+           input =>
+             val (offset, errList, res) = p.eval(input)
+             res match {
+               case Right(_) => (offset, errList, res)
+               case Left(err) => (0, errList, Left(err))
+             }
+        )
+
+        infix def or(p2: => ParserImpl[A]): ParserImpl[A] =
+          ParserImpl.apply(
+            input =>
+              val (offset, errList, res) = p.eval(input)
+              res match {
+                case Right(value) => (offset, errList, res)
+                case Left(err) => {
+                   if offset != 0 then (offset, errList, res) 
+                   else
+                    p2.eval(input)
+                }
+              }
+
+          )
+
+
+
+    def string(s: String): ParserImpl[String] =
+    ParserImpl.apply((input: String) =>
+      def parseChars(s: List[Char], input: List[Char]): (Int, Boolean) =
+        (s, input) match {
+          case ((firstExp :: restExp), (firstInput :: restInput))
+              if firstExp == firstInput => {
+                val (offsetRes, success) = parseChars(restExp, restInput)
+                (1 + offsetRes, success)
+              }
+          case (Nil, _) => (0, true)
+          case _ => (0, false)
+        }
+
+      val (offsetRead, success) =
+        parseChars(s.toCharArray().toList, input.toCharArray().toList)
+
+      if success then
+        val res: Either[ParseError, String] = Right(s)
+        (offsetRead, List[(Location, String)](), res)
+      else 
+       val errMessage = if offsetRead == input.size then 
+        f"input ended while searching for $s"
+       else 
+         val expectedCharacter = s.charAt(offsetRead)
+         val badCharacter = input.charAt(offsetRead)
+         f"expected $expectedCharacter but got $badCharacter instead"
+       val errList = List((Location(input, offsetRead), errMessage))
+       (offsetRead, errList, Left(ParseError(errList)))
+
+    )
+
+    def regex(r: Regex): ParserImpl[String] =
+    ParserImpl.apply(input => 
+      r.findPrefixOf(input) match {
+        case Some(value) => (value.size, List.empty, Right(value))
+        case None => {
+          val errList = List((Location(input, 0), "regex did not match"))
+          (0, errList, Left(ParseError(errList)))
+        }
+      }
+    )
+
+    def unit[A](a: A): ParserImpl[A] =
+      ParserImpl.apply { _ => (0, List.empty, Right(a))}
+  
