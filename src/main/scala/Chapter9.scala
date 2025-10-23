@@ -267,8 +267,6 @@ object ParsersImpl extends Parsers[ParserImpl]:
 
           )
 
-
-
     def string(s: String): ParserImpl[String] =
     ParserImpl.apply((input: String) =>
       def parseChars(s: List[Char], input: List[Char]): (Int, Boolean) =

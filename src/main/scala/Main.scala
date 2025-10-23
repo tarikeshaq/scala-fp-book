@@ -3,4 +3,4 @@
 
   import ParsersImpl.*
 
-  println(jParser.run("{\"hello\": [1, 2, 3], \"damn\": true}"))
+  println(jParser.run("{\"hello\": [1, 2, 3], \"damn\": null}"))
