@@ -1,6 +1,5 @@
 @main def hello(): Unit =
-  val jParser = parseJson(ParsersImpl)
+  val words = List("Hello", "good bye", "wow")
+  val res = myFoldLeft(words)("")(_ ++ _)
+  println(res)
 
-  import ParsersImpl.*
-
-  println(jParser.run("{\"hello\": [1, 2, 3], \"damn\": null}"))
