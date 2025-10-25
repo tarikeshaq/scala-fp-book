@@ -2,40 +2,59 @@ trait Monoid[A]:
   def combine(a1: A, a2: A): A
   def empty: A
 
-val stringMonoid: Monoid[String] = new:
-  def combine(a1: String, a2: String): String = a1+a2
-  def empty: String = "" 
-def listMonoid[A]: Monoid[List[A]] = new:
-  def combine(a1: List[A], a2: List[A]): List[A] = a1 ++ a2
-  def empty: List[A] = Nil 
 
-val intAddition: Monoid[Int] = new:
-  def combine(a1: Int, a2: Int): Int = a1 + a2
-  def empty: Int = 0
+object Monoid:
+  import WC.*
+  given stringMonoid: Monoid[String] with
+   def combine(a1: String, a2: String): String = a1+a2
+   def empty: String = "" 
 
-val intMultiplication: Monoid[Int] = new:
-  def combine(a1: Int, a2: Int): Int = a1 * a2
-  def empty: Int = 1
+  given listMonoid[A]: Monoid[List[A]] with
+    def combine(a1: List[A], a2: List[A]): List[A] = a1 ++ a2
+    def empty: List[A] = Nil 
 
-val booleanOr: Monoid[Boolean] = new:
-  def combine(a1: Boolean, a2: Boolean): Boolean = a1 || a2
-  def empty: Boolean = false
+  given intAddition: Monoid[Int] with
+    def combine(a1: Int, a2: Int): Int = a1 + a2
+    def empty: Int = 0
 
-val booleanAnd: Monoid[Boolean] = new:
-  def combine(a1: Boolean, a2: Boolean): Boolean = a1 && a2
-  def empty: Boolean = true 
+  given intMultiplication: Monoid[Int] with
+    def combine(a1: Int, a2: Int): Int = a1 * a2
+    def empty: Int = 1
 
-def optionMonoid[A]: Monoid[Option[A]] = new:
-  def combine(a1: Option[A], a2: Option[A]): Option[A] = a1 match {
+  given booleanOr: Monoid[Boolean] with
+    def combine(a1: Boolean, a2: Boolean): Boolean = a1 || a2
+    def empty: Boolean = false
+
+  given booleanAnd: Monoid[Boolean] with
+    def combine(a1: Boolean, a2: Boolean): Boolean = a1 && a2
+    def empty: Boolean = true 
+
+  given optionMonoid[A]: Monoid[Option[A]] with 
+   def combine(a1: Option[A], a2: Option[A]): Option[A] = a1 match {
     case None => a2
     case _ => a1
   }
-  def empty: Option[A] = None 
+   def empty: Option[A] = None 
 
-def endoMonoid[A]: Monoid[A => A] = new:
-  def combine(a1: A => A, a2: A => A): A => A =
+  given endoMonoid[A]: Monoid[A => A] with
+   def combine(a1: A => A, a2: A => A): A => A =
     a => a2(a1(a))
-  def empty: A => A = a => a
+   def empty: A => A = a => a
+  given wcMonoid: Monoid[WC] with 
+     def combine(a1: WC, a2: WC): WC = (a1, a2) match {
+      case (Stub(s1), Stub(s2)) => Stub(s1 ++ s2)
+      case (Stub(s1), Part(s2a, n, s2b)) => Part(s1 ++ s2a, n, s2b)
+      case (Part(s1a, n, s1b), Stub(s2)) => Part(s1a, n, s1b ++ s2)
+      case (Part(s1a, na, s1b), Part(s2a, nb, s2b)) => {
+        val count = if s1b == "" && s2a == "" then na + nb else na + nb + 1
+        Part(s1a, count, s2b)
+      }
+    }
+     def empty: WC = Stub("")
+
+  given productMonoid[A, B](using ma: Monoid[A], mb: Monoid[B]): Monoid[(A, B)] with
+    def combine(a1: (A, B), a2: (A, B)): (A, B) = (ma.combine(a1._1, a2._1), mb.combine(a1._2, a2._2))
+    def empty: (A, B) = (ma.empty, mb.empty)
 object MonoidLaws:
   def identity[A](m: Monoid[A], gen: Gen[A]): Prop =
    // There are two laws with Monoids:
@@ -55,24 +74,16 @@ object MonoidLaws:
            m.combine(a, m.combine(b, c))
      }
 
-def combineAll[A](l: List[A], m: Monoid[A]): A =
+def combineAll[A](l: List[A])(using m: Monoid[A]): A =
   l.foldLeft(m.empty)(m.combine)
 
-def foldMap[A, B](l: List[A], m: Monoid[B])(f: A => B): B =
+def foldMap[A, B](l: List[A])(f: A => B)(using m: Monoid[B]): B =
   l.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
 
-
-def myFoldRight[A, B](l: List[A])(acc: B)(f: (A, B) => B): B =
-  foldMap(l, endoMonoid[B])(f.curried)(acc)
-
-def myFoldLeft[A, B](l: List[A])(acc: B)(f: (A, B) => B): B =
-  foldMap(l, dual(endoMonoid[B]))(f.curried)(acc)
-
-def dual[A](m: Monoid[A]): Monoid[A] =
+def dual[A](using m: Monoid[A]): Monoid[A] =
   val res: Monoid[A] = new:
     def combine(a1: A, a2: A): A = m.combine(a2, a1)
     def empty: A = m.empty
-
   res
 
 def foldMapV[A,B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): B =
@@ -89,7 +100,7 @@ def par[A](m: Monoid[A]): Monoid[Par[A]] = new:
   def combine(a1: Par[A], a2: Par[A]): Par[A] = a1.map2(a2)(m.combine)
   def empty: Par[A] = Par.unit(m.empty)
 
-def parFoldMap[A, B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): Par[B] =
+def parFoldMap[A, B](as: IndexedSeq[A])(f: A => B)(using m: Monoid[B]): Par[B] =
   foldMapV(as, par(m))(Par.asyncF(f))
 
 
@@ -97,41 +108,8 @@ enum WC:
   case Stub(chars: String)
   case Part(lStub: String, words: Int, rStub: String)
 
-val wcMonoid: Monoid[WC] = new:
-  // How we combine WCs:
-  // If we have two parts, then we merge the parts by having the result
-  // have the start of the first, end of the second and words = w1 + w2 + 1 (to accomodate for the rStub and lStub)
-  // if either side is a stub, we merge the appropriate Stubs, accounting for any whitespaces that show up, turing stubs into parts when encountering those.
-  // eg:
-  // "lorem ipsum dolor sit amet, "
-  //  Stub(lor), Part("em", 0, " "), Stub("ips"), Part("um", 0, " "),
-  //  Stub("dol"), Part("or", 0, ""), Stub("sit"), Part(" ", 0, "am"),
-  //  Stub("et,"), Part(" ", 0, "")
-  //  ---
-  //  Part("lorem", 0, " "), Part("ipsum", 0, " "), Part("dolor", 0, " ")
-  //  Part("sit ", 0, "am"),
-  //  Part("et, ", 0, "")
-  //  ---
-  //  Part("lorem", 1, " "), Part("dolor", 1, "am"), Part("et,", 0, "")
-  //  ---
-  //  Part("lorem", 3, "am"), Part("et,", 0, "")
-  //  ---
-  //  Part("lorem", 4, )
-  import WC.*
-  def combine(a1: WC, a2: WC): WC = (a1, a2) match {
-    case (Stub(s1), Stub(s2)) => Stub(s1 ++ s2)
-    case (Stub(s1), Part(s2a, n, s2b)) => Part(s1 ++ s2a, n, s2b)
-    case (Part(s1a, n, s1b), Stub(s2)) => Part(s1a, n, s1b ++ s2)
-    case (Part(s1a, na, s1b), Part(s2a, nb, s2b)) => {
-      val count = if s1b == "" && s2a == "" then na + nb else na + nb + 1
-      Part(s1a, count, s2b)
-    }
-  }
-  def empty: WC = Stub("")
-
-
 def wordCount(s: String): Par[Int]=
-  parFoldMap(s.toIndexedSeq, wcMonoid) {
+  parFoldMap(s.toIndexedSeq) {
     case ' ' => WC.Part("", 0, "")
     case c => WC.Stub(c.toString)
   }.map {
@@ -143,3 +121,67 @@ def wordCount(s: String): Par[Int]=
       case _ => words + 2
     }
   }
+
+
+trait Foldable[F[_]]:
+  extension [A](as: F[A])
+    def foldRight[B](acc: B)(f: (A, B) => B): B
+    def foldLeft[B](acc: B)(f: (B, A) => B): B
+    def foldMap[B](f: A => B)(using m: Monoid[B]): B
+    def combineAll(using m: Monoid[A]): A =
+      as.foldLeft(m.empty)(m.combine)
+    def toList: List[A] =
+      as.foldMap(a => List(a))
+
+given Foldable[MyList] with
+  extension [A](as: MyList[A])
+    def foldRight[B](acc: B)(f: (A, B) => B): B =
+      MyList.foldRight(as, acc, f)
+    def foldLeft[B](acc: B)(f: (B, A) => B): B =
+      MyList.foldLeft(as, acc, (a, b) => f(b, a))
+    def foldMap[B](f: A => B)(using m: Monoid[B]): B =
+      as.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
+
+given Foldable[IndexedSeq] with
+  extension [A](as: IndexedSeq[A])
+    def foldRight[B](acc: B)(f: (A, B) => B): B = 
+      as.foldRight(acc)(f)
+    def foldLeft[B](acc: B)(f: (B, A) => B): B = 
+      as.foldLeft(acc)(f)
+    def foldMap[B](f: A => B)(using m: Monoid[B]): B =
+      as.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
+
+given Foldable[LazyList] with
+  extension [A](as: LazyList[A])
+    def foldRight[B](acc: B)(f: (A, B) => B): B = 
+      as.foldRight(acc)(f)
+    def foldLeft[B](acc: B)(f: (B, A) => B): B = 
+      as.foldLeft(acc)(f)
+    def foldMap[B](f: A => B)(using m: Monoid[B]): B =
+      as.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
+
+given Foldable[MyTree] with
+  extension [A](t: MyTree[A])
+   def foldMap[B](f: A => B)(using m: Monoid[B]): B = t match {
+     case MyTree.Leaf(value) => f(value)
+     case MyTree.Branch(right, left) => m.combine(left.foldMap(f), right.foldMap(f))
+   }
+   def foldLeft[B](acc: B)(f: (B, A) => B): B =
+      def h(a: A, b: B): B =
+        f(b, a)
+      t.foldMap(h.curried)(acc)
+   def foldRight[B](acc: B)(f: (A, B) => B): B =
+      t.foldMap(f.curried)(using dual)(acc)
+
+given Foldable[Option] with
+  extension [A](o: Option[A])
+    def foldLeft[B](acc: B)(f: (B, A) => B): B = o match {
+      case None => acc
+      case Some(value) => f(acc, value)
+    }
+    def foldRight[B](acc: B)(f: (A, B) => B): B =
+      o.foldLeft(acc)((b, a) => f(a, b))
+    def foldMap[B](f: A => B)(using m: Monoid[B]): B =
+      o.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
+
+

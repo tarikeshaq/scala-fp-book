@@ -53,6 +53,11 @@ enum MyLazyList[+A]:
     case Cons(h, tail) => f(h(), tail().foldRight(acc)(f))
   }
 
+  def foldLeft[B](acc: => B)(f: (=> B, A) => B): B = this match {
+    case Empty => acc
+    case Cons(h, tail) => tail().foldLeft(f(acc, h()))(f)
+  }
+
   def map[B](f: A => B): MyLazyList[B] = unfold(this)(s =>
     s match {
       case Empty         => None
