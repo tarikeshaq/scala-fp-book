@@ -75,5 +75,71 @@ def dual[A](m: Monoid[A]): Monoid[A] =
 
   res
 
+def foldMapV[A,B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): B =
+  if as.isEmpty then m.empty
+  else if as.length == 1 then f(as(0))
+  else
+    val middle = as.length / 2
+    val first = foldMapV(as.slice(0, middle), m)(f)
+    val second = foldMapV(as.slice(middle, as.length), m)(f)
+    m.combine(first, second)
 
 
+def par[A](m: Monoid[A]): Monoid[Par[A]] = new:
+  def combine(a1: Par[A], a2: Par[A]): Par[A] = a1.map2(a2)(m.combine)
+  def empty: Par[A] = Par.unit(m.empty)
+
+def parFoldMap[A, B](as: IndexedSeq[A], m: Monoid[B])(f: A => B): Par[B] =
+  foldMapV(as, par(m))(Par.asyncF(f))
+
+
+enum WC:
+  case Stub(chars: String)
+  case Part(lStub: String, words: Int, rStub: String)
+
+val wcMonoid: Monoid[WC] = new:
+  // How we combine WCs:
+  // If we have two parts, then we merge the parts by having the result
+  // have the start of the first, end of the second and words = w1 + w2 + 1 (to accomodate for the rStub and lStub)
+  // if either side is a stub, we merge the appropriate Stubs, accounting for any whitespaces that show up, turing stubs into parts when encountering those.
+  // eg:
+  // "lorem ipsum dolor sit amet, "
+  //  Stub(lor), Part("em", 0, " "), Stub("ips"), Part("um", 0, " "),
+  //  Stub("dol"), Part("or", 0, ""), Stub("sit"), Part(" ", 0, "am"),
+  //  Stub("et,"), Part(" ", 0, "")
+  //  ---
+  //  Part("lorem", 0, " "), Part("ipsum", 0, " "), Part("dolor", 0, " ")
+  //  Part("sit ", 0, "am"),
+  //  Part("et, ", 0, "")
+  //  ---
+  //  Part("lorem", 1, " "), Part("dolor", 1, "am"), Part("et,", 0, "")
+  //  ---
+  //  Part("lorem", 3, "am"), Part("et,", 0, "")
+  //  ---
+  //  Part("lorem", 4, )
+  import WC.*
+  def combine(a1: WC, a2: WC): WC = (a1, a2) match {
+    case (Stub(s1), Stub(s2)) => Stub(s1 ++ s2)
+    case (Stub(s1), Part(s2a, n, s2b)) => Part(s1 ++ s2a, n, s2b)
+    case (Part(s1a, n, s1b), Stub(s2)) => Part(s1a, n, s1b ++ s2)
+    case (Part(s1a, na, s1b), Part(s2a, nb, s2b)) => {
+      val count = if s1b == "" && s2a == "" then na + nb else na + nb + 1
+      Part(s1a, count, s2b)
+    }
+  }
+  def empty: WC = Stub("")
+
+
+def wordCount(s: String): Par[Int]=
+  parFoldMap(s.toIndexedSeq, wcMonoid) {
+    case ' ' => WC.Part("", 0, "")
+    case c => WC.Stub(c.toString)
+  }.map {
+    case WC.Stub(_) => 1
+    case WC.Part(lStub, words, rStub) => (lStub, rStub) match {
+      case ("", "") => words
+      case ("", rStub) => words + 1
+      case (lStub, "") => words + 1
+      case _ => words + 2
+    }
+  }
