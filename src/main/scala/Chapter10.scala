@@ -17,10 +17,6 @@ object Monoid:
     def combine(a1: Int, a2: Int): Int = a1 + a2
     def empty: Int = 0
 
-  given intMultiplication: Monoid[Int] with
-    def combine(a1: Int, a2: Int): Int = a1 * a2
-    def empty: Int = 1
-
   given booleanOr: Monoid[Boolean] with
     def combine(a1: Boolean, a2: Boolean): Boolean = a1 || a2
     def empty: Boolean = false
@@ -55,6 +51,22 @@ object Monoid:
   given productMonoid[A, B](using ma: Monoid[A], mb: Monoid[B]): Monoid[(A, B)] with
     def combine(a1: (A, B), a2: (A, B)): (A, B) = (ma.combine(a1._1, a2._1), mb.combine(a1._2, a2._2))
     def empty: (A, B) = (ma.empty, mb.empty)
+
+  given mapMergeMonoid[K, V](using mv: Monoid[V]): Monoid[Map[K, V]] with
+    def combine(a1: Map[K, V], a2: Map[K, V]): Map[K, V] = 
+      (a1.keySet ++ a2.keySet).foldLeft(empty): (acc, k) =>
+        acc.updated(k, mv.combine(a1.getOrElse(k, mv.empty), a2.getOrElse(k, mv.empty)))
+
+    def empty: Map[K, V] = Map()
+
+  given functionMonoid[A, B](using mb: Monoid[B]): Monoid[A => B] with
+    def combine(a1: A => B, a2: A => B): A => B = 
+      a => 
+        mb.combine(a1(a), a2(a))
+    def empty: A => B = 
+      a => mb.empty
+
+
 object MonoidLaws:
   def identity[A](m: Monoid[A], gen: Gen[A]): Prop =
    // There are two laws with Monoids:
@@ -185,3 +197,5 @@ given Foldable[Option] with
       o.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
 
 
+def bag[A](as: IndexedSeq[A]): Map[A, Int] =
+  as.foldMap(a => Map(a -> 1))

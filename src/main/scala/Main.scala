@@ -2,9 +2,9 @@ import java.util.concurrent.Executors
 
 @main def hello(): Unit =
   val es = Executors.newFixedThreadPool(5)
-  val words = "Hello there man, fhi! h"
-  val res = wordCount(words) 
-  println(res.run(es))
+  val words = Vector("a", "rose", "is", "a", "rose") 
+  val res = bag(words) 
+  println(res)
 
 // Goal:
 // Determine if an IndexedSeq is sorted by using foldMap
