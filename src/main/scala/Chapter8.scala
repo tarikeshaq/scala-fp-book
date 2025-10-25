@@ -188,9 +188,6 @@ object SGen:
     s => Gen.weighted((g1._1(s), g1._2), (g2._1(s), g2._2))
 
   extension [A](self: SGen[A])
-    def map2[B](that: SGen[B])(f: (A, B) => B): SGen[B] =
-      s => self(s).map2(that(s))(f)
-
     def flatMap[B](f: A => SGen[B]): SGen[B] =
       s => self(s).flatMap(a => f(a)(s))
 
