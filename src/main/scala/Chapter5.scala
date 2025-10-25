@@ -54,7 +54,7 @@ enum MyLazyList[+A]:
   }
 
   def foldLeft[B](acc: => B)(f: (=> B, A) => B): B = this match {
-    case Empty => acc
+    case Empty         => acc
     case Cons(h, tail) => tail().foldLeft(f(acc, h()))(f)
   }
 
