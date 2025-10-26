@@ -36,6 +36,20 @@ trait Monad[F[_]] extends Functor[F]:
   def sequence[A](as: List[F[A]]): F[List[A]] =
     traverse(as)(a => a)
 
+  def filterM[A](as: List[A])(f: A => F[Boolean]): F[List[A]] =
+    as.foldRight(unit(List.empty)) {
+      case (a, fl) => f(a).map2(fl) {
+        case (b, l) if b => a :: l
+        case (_, l) => l
+      }
+    }
+
+  def compose[A, B, C](f: A => F[B], g: B => F[C]): A => F[C] = 
+    a =>
+      join(f(a).map(g))
+  def join[A](ffa: F[F[A]]): F[A] =
+    ffa.flatMap(identity)
+
   extension [A](as: F[A])
     def flatMap[B](f: A => F[B]): F[B]
 
@@ -45,14 +59,35 @@ trait Monad[F[_]] extends Functor[F]:
     def map2[B, C](other: F[B])(f: (A, B) => C): F[C] =
       as.flatMap(a => other.map(b => f(a, b)))
 
+    def replicateM(n: Int): F[List[A]] = sequence(List.fill(n)(as))
+
+    def product[B](fb: F[B]): F[(A, B)] =
+      as.map2(fb)((_, _))
+
+
+case class Id[A](value: A)
 
 object Monad:
+  given identityMonad: Monad[Id] with
+    def unit[A](a: A): Id[A] = Id(value = a)
+
+    extension [A](id: Id[A])
+      def flatMap[B](f: A => Id[B]): Id[B] =
+        f(id.value)
+
   given genMonad: Monad[Gen] with
     def unit[A](a: A): Gen[A] = Gen.unit(a)
 
     extension [A](g: Gen[A])
      def flatMap[B](f: A => Gen[B]): Gen[B] =
       Gen.flatMap(g)(f) 
+
+  given stateMonad[S]: Monad[[x] =>> State[S, x]] with
+   def unit[A](a: A): State[S, A] = State(s => (a, s)) 
+    
+   extension [A](s: State[S, A])
+    def flatMap[B](f: A => State[S, B]): State[S, B] =
+     State.flatMap(s)(f) 
 
   given optionMonad: Monad[Option] with
     def unit[A](a: A): Option[A] = Some(a)

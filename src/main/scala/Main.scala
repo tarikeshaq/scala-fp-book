@@ -1,4 +1,6 @@
 import java.util.concurrent.Executors
 
 @main def hello(): Unit =
-  println("hello world")
+  val l = None 
+  val res = Monad.optionMonad.replicateM(l)(5) 
+  println(res)
