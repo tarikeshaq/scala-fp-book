@@ -1,5 +1,5 @@
-trait Monoid[A]:
-  def combine(a1: A, a2: A): A
+import Monoid.endoMonoid
+trait Monoid[A] extends SemiGroup[A]:
   def empty: A
 
 object Monoid:
@@ -135,8 +135,10 @@ def wordCount(s: String): Par[Int] =
 
 trait Foldable[F[_]]:
   extension [A](as: F[A])
-    def foldRight[B](acc: B)(f: (A, B) => B): B
-    def foldLeft[B](acc: B)(f: (B, A) => B): B
+    def foldRight[B](acc: B)(f: (A, B) => B): B =
+     as.foldMap(f.curried)(using dual)(acc)
+    def foldLeft[B](acc: B)(f: (B, A) => B): B = 
+      as.foldMap(a => b => f(b, a))(using endoMonoid[B])(acc)
     def foldMap[B](f: A => B)(using m: Monoid[B]): B
     def combineAll(using m: Monoid[A]): A =
       as.foldLeft(m.empty)(m.combine)
@@ -145,27 +147,27 @@ trait Foldable[F[_]]:
 
 given Foldable[MyList] with
   extension [A](as: MyList[A])
-    def foldRight[B](acc: B)(f: (A, B) => B): B =
+    override def foldRight[B](acc: B)(f: (A, B) => B): B =
       MyList.foldRight(as, acc, f)
-    def foldLeft[B](acc: B)(f: (B, A) => B): B =
+    override def foldLeft[B](acc: B)(f: (B, A) => B): B =
       MyList.foldLeft(as, acc, (a, b) => f(b, a))
     def foldMap[B](f: A => B)(using m: Monoid[B]): B =
       as.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
 
 given Foldable[IndexedSeq] with
   extension [A](as: IndexedSeq[A])
-    def foldRight[B](acc: B)(f: (A, B) => B): B =
+    override def foldRight[B](acc: B)(f: (A, B) => B): B =
       as.foldRight(acc)(f)
-    def foldLeft[B](acc: B)(f: (B, A) => B): B =
+    override def foldLeft[B](acc: B)(f: (B, A) => B): B =
       as.foldLeft(acc)(f)
     def foldMap[B](f: A => B)(using m: Monoid[B]): B =
       as.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
 
 given Foldable[LazyList] with
   extension [A](as: LazyList[A])
-    def foldRight[B](acc: B)(f: (A, B) => B): B =
+    override def foldRight[B](acc: B)(f: (A, B) => B): B =
       as.foldRight(acc)(f)
-    def foldLeft[B](acc: B)(f: (B, A) => B): B =
+    override def foldLeft[B](acc: B)(f: (B, A) => B): B =
       as.foldLeft(acc)(f)
     def foldMap[B](f: A => B)(using m: Monoid[B]): B =
       as.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))
@@ -177,20 +179,20 @@ given Foldable[MyTree] with
       case MyTree.Branch(right, left) =>
         m.combine(left.foldMap(f), right.foldMap(f))
     }
-    def foldLeft[B](acc: B)(f: (B, A) => B): B =
+    override def foldLeft[B](acc: B)(f: (B, A) => B): B =
       def h(a: A, b: B): B =
         f(b, a)
       t.foldMap(h.curried)(acc)
-    def foldRight[B](acc: B)(f: (A, B) => B): B =
+    override def foldRight[B](acc: B)(f: (A, B) => B): B =
       t.foldMap(f.curried)(using dual)(acc)
 
 given Foldable[Option] with
   extension [A](o: Option[A])
-    def foldLeft[B](acc: B)(f: (B, A) => B): B = o match {
+    override def foldLeft[B](acc: B)(f: (B, A) => B): B = o match {
       case None        => acc
       case Some(value) => f(acc, value)
     }
-    def foldRight[B](acc: B)(f: (A, B) => B): B =
+    override def foldRight[B](acc: B)(f: (A, B) => B): B =
       o.foldLeft(acc)((b, a) => f(a, b))
     def foldMap[B](f: A => B)(using m: Monoid[B]): B =
       o.foldLeft(m.empty)((b, a) => m.combine(b, f(a)))

@@ -25,24 +25,8 @@ given Functor[List] with
       def map[B](f: A => B): List[B] = as.map(f)
  
 
-trait Monad[F[_]] extends Functor[F]:
+trait Monad[F[_]] extends Applicative[F]:
   def unit[A](a: A): F[A]
-
-  def traverse[A, B](as: List[A])(f: A => F[B]): F[List[B]] =
-    as.foldRight(unit(List.empty)) {
-      case (a, fl) => f(a).map2(fl)(_ :: _)
-    }
-
-  def sequence[A](as: List[F[A]]): F[List[A]] =
-    traverse(as)(a => a)
-
-  def filterM[A](as: List[A])(f: A => F[Boolean]): F[List[A]] =
-    as.foldRight(unit(List.empty)) {
-      case (a, fl) => f(a).map2(fl) {
-        case (b, l) if b => a :: l
-        case (_, l) => l
-      }
-    }
 
   def compose[A, B, C](f: A => F[B], g: B => F[C]): A => F[C] = 
     a =>
@@ -50,24 +34,14 @@ trait Monad[F[_]] extends Functor[F]:
   def join[A](ffa: F[F[A]]): F[A] =
     ffa.flatMap(identity)
 
-  extension [A](as: F[A])
+  extension [A](fa: F[A])
     def flatMap[B](f: A => F[B]): F[B]
-
-    def map[B](f: A => B): F[B] =
-      as.flatMap(a => unit(f(a)))
-
-    def map2[B, C](other: F[B])(f: (A, B) => C): F[C] =
-      as.flatMap(a => other.map(b => f(a, b)))
-
-    def replicateM(n: Int): F[List[A]] = sequence(List.fill(n)(as))
-
-    def product[B](fb: F[B]): F[(A, B)] =
-      as.map2(fb)((_, _))
-
+    override def map2[B, C](other: F[B])(f: (A, B) => C): F[C] =
+      fa.flatMap(a => other.map(b => f(a, b)))
 
 case class Id[A](value: A)
 
-object Monad:
+object Id:
   given identityMonad: Monad[Id] with
     def unit[A](a: A): Id[A] = Id(value = a)
 
@@ -75,6 +49,8 @@ object Monad:
       def flatMap[B](f: A => Id[B]): Id[B] =
         f(id.value)
 
+
+object Monad:
   given genMonad: Monad[Gen] with
     def unit[A](a: A): Gen[A] = Gen.unit(a)
 

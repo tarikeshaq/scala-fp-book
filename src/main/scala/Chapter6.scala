@@ -1,6 +1,14 @@
 opaque type State[S, +A] = S => (A, S)
 
 object State:
+  given stateMonad[S]: Monad[[x] =>> State[S, x]] with
+   def unit[A](a: A): State[S, A] = State(s => (a, s)) 
+    
+   extension [A](s: State[S, A])
+    def flatMap[B](f: A => State[S, B]): State[S, B] =
+     State.flatMap(s)(f) 
+
+
   extension [S, A](underlying: State[S, A])
     def run(s: S): (A, S) = underlying(s)
 
