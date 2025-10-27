@@ -1,36 +1,32 @@
 // A functor is a typeclass that defines behavor of certain
 // types that are mappable
 trait Functor[F[_]]:
-  extension [A](as: F[A])
-    def map[B](f: A => B): F[B]
+  extension [A](as: F[A]) def map[B](f: A => B): F[B]
   extension [A, B](fab: F[(A, B)])
     def distribute: (F[A], F[B]) =
       (fab.map(_(0)), fab.map(_(1)))
   extension [A, B](fab: Either[F[A], F[B]])
     def codistribute: F[Either[A, B]] = fab match {
-      case Left(fa) => fa.map(Left(_))
+      case Left(fa)  => fa.map(Left(_))
       case Right(fb) => fb.map(Right(_))
     }
 
 given Functor[MyList] with
-    extension [A](as: MyList[A]) def map[B](f: A => B): MyList[B] = 
+  extension [A](as: MyList[A])
+    def map[B](f: A => B): MyList[B] =
       MyList.map(as, f)
 
 given Functor[Option] with
-    extension [A](o: Option[A])
-      def map[B](f: A => B): Option[B] = o.map(f)
-  
+  extension [A](o: Option[A]) def map[B](f: A => B): Option[B] = o.map(f)
+
 given Functor[List] with
-    extension [A](as: List[A])
-      def map[B](f: A => B): List[B] = as.map(f)
- 
+  extension [A](as: List[A]) def map[B](f: A => B): List[B] = as.map(f)
 
 trait Monad[F[_]] extends Applicative[F]:
   def unit[A](a: A): F[A]
 
-  def compose[A, B, C](f: A => F[B], g: B => F[C]): A => F[C] = 
-    a =>
-      join(f(a).map(g))
+  def compose[A, B, C](f: A => F[B], g: B => F[C]): A => F[C] =
+    a => join(f(a).map(g))
   def join[A](ffa: F[F[A]]): F[A] =
     ffa.flatMap(identity)
 
@@ -49,21 +45,20 @@ object Id:
       def flatMap[B](f: A => Id[B]): Id[B] =
         f(id.value)
 
-
 object Monad:
   given genMonad: Monad[Gen] with
     def unit[A](a: A): Gen[A] = Gen.unit(a)
 
     extension [A](g: Gen[A])
-     def flatMap[B](f: A => Gen[B]): Gen[B] =
-      Gen.flatMap(g)(f) 
+      def flatMap[B](f: A => Gen[B]): Gen[B] =
+        Gen.flatMap(g)(f)
 
   given stateMonad[S]: Monad[[x] =>> State[S, x]] with
-   def unit[A](a: A): State[S, A] = State(s => (a, s)) 
-    
-   extension [A](s: State[S, A])
-    def flatMap[B](f: A => State[S, B]): State[S, B] =
-     State.flatMap(s)(f) 
+    def unit[A](a: A): State[S, A] = State(s => (a, s))
+
+    extension [A](s: State[S, A])
+      def flatMap[B](f: A => State[S, B]): State[S, B] =
+        State.flatMap(s)(f)
 
   given optionMonad: Monad[Option] with
     def unit[A](a: A): Option[A] = Some(a)
@@ -71,8 +66,8 @@ object Monad:
     extension [A](o: Option[A])
       def flatMap[B](f: A => Option[B]): Option[B] = o match {
         case Some(a) => f(a)
-        case None => None
-      } 
+        case None    => None
+      }
   given listMonad: Monad[List] with
     def unit[A](a: A): List[A] = List(a)
 
@@ -91,16 +86,10 @@ object Monad:
 
     extension [A](p: Par[A])
       def flatMap[B](f: A => Par[B]): Par[B] =
-       Par.flatMap(p)(f) 
+        Par.flatMap(p)(f)
   given parserMonad: Monad[Parser] with
-    def unit[A](a: A): Parser[A] = ParsersImpl.unit(a) 
+    def unit[A](a: A): Parser[A] = ParsersImpl.unit(a)
 
     extension [A](p: Parser[A])
       def flatMap[B](f: A => Parser[B]): Parser[B] =
-       ParsersImpl.flatMap(p)(f) 
-
-
-
-  
-  
-
+        ParsersImpl.flatMap(p)(f)
