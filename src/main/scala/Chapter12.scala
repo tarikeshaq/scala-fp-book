@@ -37,6 +37,32 @@ trait Traverse[F[_]] extends Functor[F], Foldable[F]:
     def reverse: F[A] =
       mapAccum(fa.toList.reverse)((a, s) => (s.head, s.tail))(0)
 
+    override def foldLeft[B](acc: B)(f: (B, A) => B): B = 
+      mapAccum(acc)((a, s) => {
+        val res = f(s, a)
+        (res, res)
+      })(1)
+    
+    def zipL[B](fb: F[B]): F[(A, Option[B])] =
+      fa.mapAccum(fb.toList) {
+        case (a, Nil) => ((a, None), Nil)
+        case (a, b :: bs) => ((a, Some(b) : Option[B]), bs)
+      }.apply(0)
+
+    def fuse[M[_]: Applicative, N[_]: Applicative, B](
+      f: A => M[B], g: A => N[B]
+      ): (M[F[B]], N[F[B]]) =
+        given Applicative[[x] =>> (M[x], N[x])] =
+          summon[Applicative[M]].product(summon[Applicative[N]])
+        fa.traverse[[x] =>> (M[x], N[x]), B](a => (f(a), g(a)))
+
+
+    def zipR[B](fb: F[B]): F[(Option[A], B)] =
+      fb.mapAccum(fa.toList) {
+        case (b, Nil) => ((None, b), Nil)
+        case (b, a :: as) => ((Some(a): Option[A], b), as)
+      }.apply(0)
+
   extension [G[_]: Applicative, A](fga: F[G[A]])
     def sequence: G[F[A]] =
       fga.traverse(ga => ga)
