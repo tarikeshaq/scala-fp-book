@@ -99,10 +99,11 @@ object Monad:
       }
 
   given function0Monad: Monad[Function0] with
-   def unit[A](a: A): () => A = () => a
-  
-   extension [A](fa: () => A) def flatMap[B](f: A => () => B): () => B = 
-     () => f(fa())()
+    def unit[A](a: A): () => A = () => a
+
+    extension [A](fa: () => A)
+      def flatMap[B](f: A => () => B): () => B =
+        () => f(fa())()
 
   given listMonad: Monad[List] with
     def unit[A](a: A): List[A] = List(a)
