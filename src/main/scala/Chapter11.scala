@@ -34,6 +34,35 @@ trait Monad[F[_]] extends Applicative[F]:
     def flatMap[B](f: A => F[B]): F[B]
     override def map2[B, C](other: F[B])(f: (A, B) => C): F[C] =
       fa.flatMap(a => other.map(b => f(a, b)))
+    def void: F[Unit] = fa.map(_ => ())
+
+    def doWhile(cond: A => F[Boolean]): F[Unit] =
+      for
+        a <- fa
+        ok <- cond(a)
+        _ <- if ok then doWhile(cond) else unit(())
+      yield ()
+
+    def forever[B]: F[B] =
+      lazy val t: F[B] = fa.forever
+      fa.flatMap(_ => t)
+
+  def foldM[A, B](
+      l: LazyList[A]
+  )(z: B)(f: (B, A) => F[B]): F[B] =
+    l match
+      case h #:: t => f(z, h).flatMap(z2 => foldM(t)(z2)(f))
+      case _       => unit(z)
+
+  def foldM_[A, B](
+      l: LazyList[A]
+  )(z: B)(f: (B, A) => F[B]): F[Unit] =
+    foldM(l)(z)(f).void
+
+  def foreachM[A](
+      l: LazyList[A]
+  )(f: A => F[Unit]): F[Unit] =
+    foldM_(l)(())((u, a) => f(a).void)
 
 case class Id[A](value: A)
 
@@ -68,6 +97,13 @@ object Monad:
         case Some(a) => f(a)
         case None    => None
       }
+
+  given function0Monad: Monad[Function0] with
+   def unit[A](a: A): () => A = () => a
+  
+   extension [A](fa: () => A) def flatMap[B](f: A => () => B): () => B = 
+     () => f(fa())()
+
   given listMonad: Monad[List] with
     def unit[A](a: A): List[A] = List(a)
 
